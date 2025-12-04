@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, List
+from agent.agent_core import CoreAgent
 
 
 INPUT_PATH = Path("cse_476_final_project_test_data.json")
@@ -29,13 +30,14 @@ def load_questions(path: Path) -> List[Dict[str, Any]]:
 
 
 def build_answers(questions: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    agent = CoreAgent()
     answers = []
     for idx, question in enumerate(questions, start=1):
         # Example: assume you have an agent loop that produces an answer string.
         # real_answer = agent_loop(question["input"])
         # answers.append({"output": real_answer})
-        placeholder_answer = f"Placeholder answer for question {idx}"
-        answers.append({"output": placeholder_answer})
+        real_answer = agent.run(question["input"], question.get("domain"))
+        answers.append({"output": real_answer})
     return answers
 
 
