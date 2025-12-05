@@ -64,7 +64,11 @@ def run_cot(question: str, domain: str | None = None) -> str:
     return extract_final_answer(text)
 
 
-def run_cot_with_critique(question: str, domain: str | None = None) -> str:
+
+def run_self_critique(question: str, domain: str | None = None) -> str:
+    """
+    Self-Critique: I get an initial answer, then ask the model to verify and correct it.
+    """
     # First: get the initial answer
     initial = run_cot(question, domain)
     if not initial or initial == "ERROR":
