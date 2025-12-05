@@ -9,7 +9,8 @@ def call_model(prompt: str,
                                 system: str = "You are a helpful assistant. Reply with only the final answer—no explanation.",
                                 model: str = MODEL,
                                 temperature: float = 0.0,
-                                timeout: int = 60) -> dict:
+                                timeout: int = 30,
+                                max_tokens: int = 1024) -> dict:
     """
     Calls an OpenAI-style /v1/chat/completions endpoint and returns:
     { 'ok': bool, 'text': str or None, 'raw': dict or None, 'status': int, 'error': str or None, 'headers': dict }
@@ -26,11 +27,13 @@ def call_model(prompt: str,
             {"role": "user",   "content": prompt}
         ],
         "temperature": temperature,
-        "max_tokens": 128,
+        "max_tokens": max_tokens,
     }
 
     try:
+        print("Calling model...")
         resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        print("Model returned.")
         status = resp.status_code
         hdrs   = dict(resp.headers)
         if status == 200:
@@ -46,4 +49,4 @@ def call_model(prompt: str,
                 err_text = resp.text
             return {"ok": False, "text": None, "raw": None, "status": status, "error": str(err_text), "headers": hdrs}
     except requests.RequestException as e:
-        return {"ok": False, "text": None, "raw": None, "status": -1, "error": str(e), "headers": {}}
+        return {"ok": False, "text": "", "raw": None, "status": -1, "error": str(e), "headers": {}}
