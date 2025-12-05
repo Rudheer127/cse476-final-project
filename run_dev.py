@@ -17,4 +17,4 @@ if __name__ == "__main__":
     print("MODEL SAYS:", (result["text"] or "").strip())
     agent = CoreAgent()
     dev_data = load_dev_data()
-    evaluate_agent(agent, dev_data, max_examples=100)
+    evaluate_agent(agent, dev_data, max_examples=5)

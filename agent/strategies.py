@@ -1,4 +1,5 @@
 from agent.api_client import call_model
+from evaluation import extract_number
 
 def extract_final_answer(text: str) -> str:
     """
@@ -36,9 +37,12 @@ def run_cot(question: str, domain: str | None = None) -> str:
 
     # Tell the model to think step-by-step but finish with a single "FINAL ANSWER:" line
     system_msg = (
-        "You are a careful problem solver. "
-        "Think step by step, but end with a line that starts with "
-        "'FINAL ANSWER:' followed by the final answer only."
+        "You are a careful problem solver.\n"
+        "You MUST output your final answer in the form:\n"
+        "FINAL ANSWER: <answer>\n\n"
+        "Do NOT include explanation after the final answer.\n"
+        "Keep reasoning concise and place it BEFORE the FINAL ANSWER line."
+        "Your final answer must be short — a word, phrase, number, or name."
     )
 
     # Call the model once
