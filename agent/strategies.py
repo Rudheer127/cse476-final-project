@@ -102,8 +102,13 @@ def run_self_critique(question: str, domain: str | None = None) -> str:
     return final or initial
 
 def run_self_consistency(question: str, domain: str | None = None, num_samples: int = 3) -> str:
+    """
+    Self-Consistency: I run CoT multiple times and take the most common answer.
+    This filters out random errors by majority voting.
+    """
     answers = []
 
+    # Run CoT multiple times to get different attempts
     for _ in range(num_samples):
         ans = run_cot(question, domain)
         if ans:
@@ -112,7 +117,7 @@ def run_self_consistency(question: str, domain: str | None = None, num_samples: 
     if not answers:
         return "ERROR"
 
-    # If numeric domain, try numeric majority/median
+    # For numeric answers, I use median to be robust against outliers
     nums = []
     for a in answers:
         n = extract_number(a)
@@ -120,12 +125,11 @@ def run_self_consistency(question: str, domain: str | None = None, num_samples: 
             nums.append(float(n))
 
     if len(nums) >= 2:
-        # Use median value
         nums.sort()
         mid = nums[len(nums)//2]
         return str(int(mid)) if mid.is_integer() else str(mid)
 
-    # Otherwise majority vote on strings
+    # For text answers, I use majority voting
     counts = {}
     for a in answers:
         counts[a] = counts.get(a, 0) + 1
