@@ -61,27 +61,8 @@ def run_cot(question: str, domain: str | None = None) -> str:
     if not text:
         return "ERROR"
 
-    # Look for the explicit FINAL ANSWER line
-    lines = text.splitlines()
-    prefix = "FINAL ANSWER:"
+    return extract_final_answer(text)
 
-    for raw_line in lines:
-        line = raw_line.strip()
-        if prefix in line:
-            # Take whatever comes after the prefix
-            _, after = line.split(prefix, 1)
-            answer = after.strip()
-            if answer:
-                return answer
-
-    # If the model didn't follow instructions, use the last non-empty line
-    for raw_line in reversed(lines):
-        line = raw_line.strip()
-        if line:
-            return line
-
-    # Last fallback: return the whole text
-    return text
 
 def run_cot_with_critique(question: str, domain: str | None = None) -> str:
     # First: get the initial answer
