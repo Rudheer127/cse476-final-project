@@ -165,7 +165,7 @@ def run_self_critique(question: str, domain: str | None = None) -> str:
     return final or initial.strip()
 
 
-def run_self_consistency(question: str, domain: str | None = None, num_samples: int = 2) -> str:
+def run_self_consistency(question: str, domain: str | None = None, num_samples: int = 3) -> str:
     answers = []
     for _ in range(num_samples):
         ans = run_cot(question, domain)

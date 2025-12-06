@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from agent.agent_core import CoreAgent
 
-NUM_TEST_QUESTIONS = 10
+NUM_TEST_QUESTIONS = 20
 
 INPUT_PATH = Path("cse_476_final_project_test_data.json")
 OUTPUT_PATH = Path("cse_476_final_project_answers.json")
