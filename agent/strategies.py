@@ -30,27 +30,24 @@ def extract_final_answer(text: str) -> str:
 
 
 def run_cot(question: str, domain: str | None = None) -> str:
-    # I ask the model to reason step-by-step using a simple prompt. 
     cot_prompt = (
-        "Think step by step and solve the question.\n"
-        "Question: " + question + "\n"
-        "Give your reasoning first.\n"
-        "Then write the final answer on a new line starting with: FINAL ANSWER:\n"
+        "Answer the following question.\n"
+        "Do NOT show any reasoning or explanation.\n"
+        "Write exactly one line in this format:\n"
+        "FINAL ANSWER: <answer>\n\n"
+        f"Question: {question}\n"
     )
 
-    # I call the model with this reasoning prompt.
     result = call_model(cot_prompt, temperature=0.0)
     if not result.get("ok"):
         return "ERROR"
 
-    reasoning_text = (result.get("text") or "").strip()
-    if not reasoning_text:
+    text = (result.get("text") or "").strip()
+    if not text:
         return "ERROR"
 
-    # I extract only the final answer line.
-    final = extract_final_answer(reasoning_text)
+    final = extract_final_answer(text)
     return final
-
 
 def run_self_critique(question: str, domain: str | None = None) -> str:
     """
@@ -60,6 +57,8 @@ def run_self_critique(question: str, domain: str | None = None) -> str:
     initial = run_cot(question, domain)
     if not initial or initial == "ERROR":
         return initial
+    if "\n" not in initial and len(initial) < 40:
+        return initial.strip()
 
     critique_prompt = (
         "I will show a question and a proposed answer.\n"
@@ -78,7 +77,7 @@ def run_self_critique(question: str, domain: str | None = None) -> str:
     final = extract_final_answer(text)
     return final or initial
 
-def run_self_consistency(question: str, domain: str | None = None, num_samples: int = 3) -> str:
+def run_self_consistency(question: str, domain: str | None = None, num_samples: int = 2) -> str:
     answers = []
     for _ in range(num_samples):
         ans = run_cot(question, domain)
