@@ -4,7 +4,8 @@ from evaluation import extract_number
 def extract_final_answer(text: str) -> str:
     """
     Extracts the final answer from a model response.
-    Looks for a 'FINAL ANSWER:' line; otherwise returns last non-empty line.
+    I first look for a 'FINAL ANSWER:' line; if I don't find it,
+    I use the last non-empty line. Then I clean it up a bit.
     """
     if not text:
         return "ERROR"
@@ -12,31 +13,75 @@ def extract_final_answer(text: str) -> str:
     prefix = "FINAL ANSWER:"
     lines = text.strip().splitlines()
 
-    # Look for explicit FINAL ANSWER line
+    answer = None
+
     for raw in lines:
         line = raw.strip()
         if prefix in line:
             _, after = line.split(prefix, 1)
-            if after.strip():
-                return after.strip()
+            candidate = after.strip()
+            if candidate:
+                answer = candidate
+                break
 
-    # Fallback: use last non-empty line
-    for raw in reversed(lines):
-        line = raw.strip()
-        if line:
-            return line
+    if answer is None:
+        for raw in reversed(lines):
+            line = raw.strip()
+            if line:
+                answer = line
+                break
 
-    return text.strip()
+    if answer is None:
+        answer = text.strip()
 
+    cleaned = answer.strip()
+
+    cleaned = cleaned.strip('"').strip("'")
+
+    if "FINAL ANSWER" in cleaned:
+        cleaned = cleaned.split("FINAL ANSWER")[0].strip()
+
+    core = cleaned.strip("()[] .")
+    if len(cleaned) <= 4 and len(core) == 1 and core.upper() in "ABCD":
+        cleaned = core.upper()
+
+    if any(ord(c) > 127 for c in cleaned):
+        num = extract_number(cleaned)
+        if num is not None and str(num).strip() != "":
+            cleaned = str(num).strip()
+    return cleaned.strip()
 
 def run_cot(question: str, domain: str | None = None) -> str:
-    cot_prompt = (
-        "Answer the following question.\n"
-        "Do NOT show any reasoning or explanation.\n"
-        "Write exactly one line in this format:\n"
-        "FINAL ANSWER: <answer>\n\n"
-        f"Question: {question}\n"
-    )
+    # I clean the question text first.
+    q = (question or "").strip()
+
+    # If the question has options A/B/C/D, I treat it as multiple-choice.
+    if "Options:" in q and "(A" in q:
+        cot_prompt = (
+            "You are answering a multiple-choice question.\n"
+            "Choose the single best option from A, B, C, or D.\n"
+            "Respond on one line in this format:\n"
+            "FINAL ANSWER: <letter>\n\n"
+            f"Question:\n{q}\n"
+        )
+    # If it's clearly a yes/no question, I constrain the answer.
+    elif q.lower().startswith("is ") or q.lower().startswith("does ") or q.lower().startswith("do "):
+        cot_prompt = (
+            "Answer the following question with Yes or No only.\n"
+            "Respond on one line, using exactly one of these two forms:\n"
+            "FINAL ANSWER: Yes\nor\nFINAL ANSWER: No\n\n"
+            f"Question:\n{q}\n"
+        )
+
+    else:
+        # For all other questions I want just the final answer, no reasoning.
+        cot_prompt = (
+            "Answer the following question.\n"
+            "Do NOT show any reasoning or explanation.\n"
+            "Respond on one line in this format:\n"
+            "FINAL ANSWER: <answer>\n\n"
+            f"Question:\n{q}\n"
+        )
 
     result = call_model(cot_prompt, temperature=0.0)
     if not result.get("ok"):
