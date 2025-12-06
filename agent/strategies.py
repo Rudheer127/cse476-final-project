@@ -68,6 +68,7 @@ def run_cot(question: str, domain: str | None = None) -> str:
         cot_prompt = (
             "You are answering a multiple-choice question.\n"
             "Choose the single best option from A, B, C, or D.\n"
+            "Do NOT show any reasoning or explanation.\n"
             "Respond on one line in this exact format:\n"
             "FINAL ANSWER: <letter>\n\n"
             f"Question:\n{q}\n"
@@ -76,18 +77,20 @@ def run_cot(question: str, domain: str | None = None) -> str:
     elif is_yesno:
         cot_prompt = (
             "Answer the following question with Yes or No only.\n"
+            "Do NOT show any reasoning or explanation.\n"
             "Respond on one line, using exactly one of these two forms:\n"
             "FINAL ANSWER: Yes\nor\nFINAL ANSWER: No\n\n"
             f"Question:\n{q}\n"
+
         )
 
     elif has_digit:
         # For math questions I want the model to be extra careful,
         # but still only show the final answer.
         cot_prompt = (
-            "Carefully solve the following question step by step in your head.\n"
-            "Double-check any arithmetic.\n"
-            "Then respond on one line in this exact format (no extra words):\n"
+            "Solve the following math question carefully.\n"
+            "Do NOT show any reasoning or explanation.\n"
+            "Respond on one line in this exact format:\n"
             "FINAL ANSWER: <answer>\n\n"
             f"Question:\n{q}\n"
         )
@@ -109,14 +112,7 @@ def run_cot(question: str, domain: str | None = None) -> str:
     text = (result.get("text") or "").strip()
     if not text:
         return "ERROR"
-    result = call_model(cot_prompt, temperature=0.0)
-    if not result.get("ok"):
-        return "ERROR"
-
-    text = (result.get("text") or "").strip()
-    if not text:
-        return "ERROR"
-
+    
     final = extract_final_answer(text)
 
     # If this was a multiple-choice question and the final answer isn't
@@ -131,31 +127,43 @@ def run_cot(question: str, domain: str | None = None) -> str:
 
 def run_self_critique(question: str, domain: str | None = None) -> str:
     """
-    Self-Critique: I get an initial answer, then ask the model to verify and correct it.
+    Self-critique strategy.
+    First obtains an initial answer using run_cot, then asks the model to verify
+    and, if needed, correct that answer while enforcing a clean FINAL ANSWER line.
     """
-    # First: get the initial answer
+    # First obtain the initial answer using the CoT-style prompt.
     initial = run_cot(question, domain)
     if not initial or initial == "ERROR":
         return initial
-    if "\n" not in initial and len(initial) < 40:
+
+    # If the initial answer is already short and clean, keep it to avoid extra calls.
+    if "\n" not in initial and len(initial.strip()) < 40:
         return initial.strip()
 
+    # For longer or messy answers, ask the model to confirm or correct them.
     critique_prompt = (
-        "I will show a question and a proposed answer.\n"
-        "I think step by step and decide if the answer is correct.\n"
-        "If it's wrong, I fix it.\n\n"
-        "Question:\n" + question + "\n\n"
-        "Proposed Answer:\n" + initial + "\n\n"
-        "After thinking, I write the corrected final answer on a new line starting with FINAL ANSWER:\n"
+        "You will see a question and a proposed answer.\n"
+        "Decide whether the proposed answer is correct.\n"
+        "If it is wrong, provide the correct answer.\n"
+        "Do NOT show any reasoning or explanation.\n"
+        "Respond on one line in this exact format:\n"
+        "FINAL ANSWER: <answer>\n\n"
+        f"Question:\n{question}\n\n"
+        f"Proposed answer:\n{initial}\n"
     )
 
     result = call_model(critique_prompt, temperature=0.0)
     if not result.get("ok"):
-        return initial
+        # If the critique call fails, fall back to the initial answer.
+        return initial.strip()
 
     text = (result.get("text") or "").strip()
+    if not text:
+        return initial.strip()
+
     final = extract_final_answer(text)
-    return final or initial
+    return final or initial.strip()
+
 
 def run_self_consistency(question: str, domain: str | None = None, num_samples: int = 2) -> str:
     answers = []
