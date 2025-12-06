@@ -55,17 +55,25 @@ def run_cot(question: str, domain: str | None = None) -> str:
     # I clean the question text first.
     q = (question or "").strip()
 
-    # If the question has options A/B/C/D, I treat it as multiple-choice.
-    if "Options:" in q and "(A" in q:
+    # I detect if this looks like a multiple-choice question.
+    is_mc = "Options:" in q and "(A" in q
+
+    # I detect if this looks like a yes/no question.
+    is_yesno = q.lower().startswith("is ") or q.lower().startswith("does ") or q.lower().startswith("do ")
+
+    # I detect if this looks like a numeric / math question.
+    has_digit = any(ch.isdigit() for ch in q)
+
+    if is_mc:
         cot_prompt = (
             "You are answering a multiple-choice question.\n"
             "Choose the single best option from A, B, C, or D.\n"
-            "Respond on one line in this format:\n"
+            "Respond on one line in this exact format:\n"
             "FINAL ANSWER: <letter>\n\n"
             f"Question:\n{q}\n"
         )
-    # If it's clearly a yes/no question, I constrain the answer.
-    elif q.lower().startswith("is ") or q.lower().startswith("does ") or q.lower().startswith("do "):
+
+    elif is_yesno:
         cot_prompt = (
             "Answer the following question with Yes or No only.\n"
             "Respond on one line, using exactly one of these two forms:\n"
@@ -73,12 +81,23 @@ def run_cot(question: str, domain: str | None = None) -> str:
             f"Question:\n{q}\n"
         )
 
+    elif has_digit:
+        # For math questions I want the model to be extra careful,
+        # but still only show the final answer.
+        cot_prompt = (
+            "Carefully solve the following question step by step in your head.\n"
+            "Double-check any arithmetic.\n"
+            "Then respond on one line in this exact format (no extra words):\n"
+            "FINAL ANSWER: <answer>\n\n"
+            f"Question:\n{q}\n"
+        )
+
     else:
-        # For all other questions I want just the final answer, no reasoning.
+        # For general questions I just want a short final answer.
         cot_prompt = (
             "Answer the following question.\n"
             "Do NOT show any reasoning or explanation.\n"
-            "Respond on one line in this format:\n"
+            "Respond on one line in this exact format:\n"
             "FINAL ANSWER: <answer>\n\n"
             f"Question:\n{q}\n"
         )
@@ -90,8 +109,24 @@ def run_cot(question: str, domain: str | None = None) -> str:
     text = (result.get("text") or "").strip()
     if not text:
         return "ERROR"
+    result = call_model(cot_prompt, temperature=0.0)
+    if not result.get("ok"):
+        return "ERROR"
+
+    text = (result.get("text") or "").strip()
+    if not text:
+        return "ERROR"
 
     final = extract_final_answer(text)
+
+    # If this was a multiple-choice question and the final answer isn't
+    # a single letter, I try to salvage the first A/B/C/D from it.
+    if is_mc:
+        if final.upper() not in {"A", "B", "C", "D"}:
+            for ch in final:
+                if ch.upper() in {"A", "B", "C", "D"}:
+                    final = ch.upper()
+                    break
     return final
 
 def run_self_critique(question: str, domain: str | None = None) -> str:
