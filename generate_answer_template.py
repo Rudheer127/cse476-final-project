@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from agent.agent_core import CoreAgent
 
+NUM_TEST_QUESTIONS = 10
 
 INPUT_PATH = Path("cse_476_final_project_test_data.json")
 OUTPUT_PATH = Path("cse_476_final_project_answers.json")
@@ -36,9 +37,6 @@ def build_answers(questions: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     print(f"Total questions: {total}")
     for idx, question in enumerate(questions, start=1):
         print(f"[{idx}/{total}] Running agent...")
-        # Example: assume you have an agent loop that produces an answer string.
-        # real_answer = agent_loop(question["input"])
-        # answers.append({"output": real_answer})
         real_answer = agent.run(question["input"], question.get("domain"))
         print(f"[{idx}/{total}] Done")
         answers.append({"output": real_answer})
@@ -68,6 +66,13 @@ def validate_results(
 
 def main() -> None:
     questions = load_questions(INPUT_PATH)
+    # Test first 200 questions to validate agent
+    if NUM_TEST_QUESTIONS is not None:
+        questions = questions[:NUM_TEST_QUESTIONS]
+        print(f"Testing on first {len(questions)} questions...")
+    else:
+        print(f"Running on all {len(questions)} questions...")
+    
     answers = build_answers(questions)
 
     with OUTPUT_PATH.open("w", encoding="utf-8") as fp:
