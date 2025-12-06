@@ -30,39 +30,26 @@ def extract_final_answer(text: str) -> str:
 
 
 def run_cot(question: str, domain: str | None = None) -> str:
-    """
-    Chain-of-Thought strategy. Ask the model to think step-by-step,
-    then return only the final answer.
-    """
-
-    # Tell the model to think step-by-step but finish with a single "FINAL ANSWER:" line
-    system_msg = (
-        "You are a careful problem solver.\n"
-        "You MUST output your final answer in the form:\n"
-        "FINAL ANSWER: <answer>\n\n"
-        "Do NOT include explanation after the final answer.\n"
-        "Keep reasoning concise and place it BEFORE the FINAL ANSWER line."
-        "Your final answer must be short — a word, phrase, number, or name."
+    # I ask the model to reason step-by-step using a simple prompt. 
+    cot_prompt = (
+        "Think step by step and solve the question.\n"
+        "Question: " + question + "\n"
+        "Give your reasoning first.\n"
+        "Then write the final answer on a new line starting with: FINAL ANSWER:\n"
     )
 
-    # Call the model once
-    result = call_model(
-        question,
-        system=system_msg,
-        temperature=0.0,
-    )
-
-    # If the call failed, return a simple error marker
+    # I call the model with this reasoning prompt.
+    result = call_model(cot_prompt, temperature=0.0)
     if not result.get("ok"):
         return "ERROR"
 
-    # Clean up the text
-    text = (result.get("text") or "").strip()
-    if not text:
+    reasoning_text = (result.get("text") or "").strip()
+    if not reasoning_text:
         return "ERROR"
 
-    return extract_final_answer(text)
-
+    # I extract only the final answer line.
+    final = extract_final_answer(reasoning_text)
+    return final
 
 
 def run_self_critique(question: str, domain: str | None = None) -> str:
