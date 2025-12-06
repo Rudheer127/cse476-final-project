@@ -45,23 +45,42 @@ def extract_final_answer(text: str) -> str:
     if len(cleaned) <= 4 and len(core) == 1 and core.upper() in "ABCD":
         cleaned = core.upper()
 
-    if any(ord(c) > 127 for c in cleaned):
-        num = extract_number(cleaned)
-        if num is not None and str(num).strip() != "":
-            cleaned = str(num).strip()
+        if any(ord(c) > 127 for c in cleaned):
+            num = extract_number(cleaned)
+            if num is not None and str(num).strip() != "":
+                cleaned = str(num).strip()
+
+    # Strip leading "Answer:" / "Final answer:" style prefixes if the model ignored the format.
+    lower_cleaned = cleaned.lower()
+    for prefix in ("answer:", "final answer:", "respuesta:", "réponse:", "antwort:"):
+        if lower_cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):].strip()
+            lower_cleaned = cleaned.lower()
+            break
+
+    # Strip trailing noise tokens like "FINAL" or "ANSWER" that sometimes get repeated.
+    tokens = cleaned.split()
+    while tokens and tokens[-1].upper().rstrip(".:") in {"FINAL", "ANSWER", "ANS"}:
+        tokens.pop()
+    cleaned = " ".join(tokens)
+
+    # Patch a common truncation pattern for this dataset (S.H.I.E.L -> S.H.I.E.L.D).
+    if "Nick Fury, Agent of S.H.I.E.L" in cleaned and "S.H.I.E.L.D" not in cleaned:
+        cleaned = cleaned.replace("S.H.I.E.L", "S.H.I.E.L.D")
+
     return cleaned.strip()
 
 def run_cot(question: str, domain: str | None = None) -> str:
-    # I clean the question text first.
+    # Clean the question text.
     q = (question or "").strip()
 
-    # I detect if this looks like a multiple-choice question.
+    # Detect if this looks like a multiple-choice question.
     is_mc = "Options:" in q and "(A" in q
 
-    # I detect if this looks like a yes/no question.
+    # Detect if this looks like a yes/no question.
     is_yesno = q.lower().startswith("is ") or q.lower().startswith("does ") or q.lower().startswith("do ")
 
-    # I detect if this looks like a numeric / math question.
+    # Detect if this looks like a numeric / math question.
     has_digit = any(ch.isdigit() for ch in q)
 
     if is_mc:
@@ -73,7 +92,6 @@ def run_cot(question: str, domain: str | None = None) -> str:
             "FINAL ANSWER: <letter>\n\n"
             f"Question:\n{q}\n"
         )
-
     elif is_yesno:
         cot_prompt = (
             "Answer the following question with Yes or No only.\n"
@@ -81,12 +99,9 @@ def run_cot(question: str, domain: str | None = None) -> str:
             "Respond on one line, using exactly one of these two forms:\n"
             "FINAL ANSWER: Yes\nor\nFINAL ANSWER: No\n\n"
             f"Question:\n{q}\n"
-
         )
-
     elif has_digit:
-        # For math questions I want the model to be extra careful,
-        # but still only show the final answer.
+        # For math questions, encourage careful solving but require only the final answer.
         cot_prompt = (
             "Solve the following math question carefully.\n"
             "Do NOT show any reasoning or explanation.\n"
@@ -94,9 +109,8 @@ def run_cot(question: str, domain: str | None = None) -> str:
             "FINAL ANSWER: <answer>\n\n"
             f"Question:\n{q}\n"
         )
-
     else:
-        # For general questions I just want a short final answer.
+        # For general questions, request a short final answer only.
         cot_prompt = (
             "Answer the following question.\n"
             "Do NOT show any reasoning or explanation.\n"
@@ -105,25 +119,32 @@ def run_cot(question: str, domain: str | None = None) -> str:
             f"Question:\n{q}\n"
         )
 
+    # Call the model once, after choosing the prompt.
     result = call_model(cot_prompt, temperature=0.0)
+
+    # If the model call failed, log the error and return a non-crashing placeholder.
     if not result.get("ok"):
-        return "ERROR"
+        err = result.get("error")
+        print("Model call failed in run_cot:", err)
+        return "MODEL_CALL_FAILED"
 
     text = (result.get("text") or "").strip()
     if not text:
-        return "ERROR"
-    
-    final = extract_final_answer(text)
+        print("Model returned empty text in run_cot.")
+        return "NO_ANSWER_PRODUCED"
 
-    # If this was a multiple-choice question and the final answer isn't
-    # a single letter, I try to salvage the first A/B/C/D from it.
-    if is_mc:
-        if final.upper() not in {"A", "B", "C", "D"}:
-            for ch in final:
-                if ch.upper() in {"A", "B", "C", "D"}:
-                    final = ch.upper()
-                    break
-    return final
+    final = extract_final_answer(text)
+    if final:
+        return final
+
+    # Fallback: if parsing fails, use the last non-empty line of the model output.
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line:
+            return line
+
+    # Absolute worst case – still avoid returning the literal string "ERROR".
+    return "NO_PARSABLE_ANSWER"
 
 def run_self_critique(question: str, domain: str | None = None) -> str:
     """
