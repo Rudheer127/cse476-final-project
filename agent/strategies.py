@@ -61,30 +61,20 @@ def run_self_critique(question: str, domain: str | None = None) -> str:
     if not initial or initial == "ERROR":
         return initial
 
-    system_msg = (
-        "You will see a question and a proposed answer.\n"
-        "Evaluate whether the answer is correct.\n"
-        "If it is wrong, compute the correct answer.\n"
-        "Think step by step, but end with a single line starting with "
-        "'FINAL ANSWER:' followed by the corrected or confirmed answer."
+    critique_prompt = (
+        "I will show a question and a proposed answer.\n"
+        "I think step by step and decide if the answer is correct.\n"
+        "If it's wrong, I fix it.\n\n"
+        "Question:\n" + question + "\n\n"
+        "Proposed Answer:\n" + initial + "\n\n"
+        "After thinking, I write the corrected final answer on a new line starting with FINAL ANSWER:\n"
     )
 
-    prompt = (
-        f"Question:\n{question}\n\n"
-        f"Proposed Answer:\n{initial}\n\n"
-        "If the proposed answer is correct, repeat it. "
-        "If incorrect, provide the correct one."
-    )
-
-    result = call_model(prompt, system=system_msg, temperature=0.0)
-
+    result = call_model(critique_prompt, temperature=0.0)
     if not result.get("ok"):
-        return initial  # Safe fallback
-
-    text = (result.get("text") or "").strip()
-    if not text:
         return initial
 
+    text = (result.get("text") or "").strip()
     final = extract_final_answer(text)
     return final or initial
 
