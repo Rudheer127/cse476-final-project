@@ -1,11 +1,17 @@
 from agent.api_client import call_model
 from evaluation import extract_number
+from agent.api_client import call_model
+from evaluation import extract_number
 
 def extract_final_answer(text: str) -> str:
     """
-    Extracts the final answer from a model response.
-    I first look for a 'FINAL ANSWER:' line; if I don't find it,
-    I use the last non-empty line. Then I clean it up a bit.
+    Extract the final answer from a model response.
+
+    Priority:
+    1. Lines like: "The final answer is: (<answer>)"
+    2. A line containing "FINAL ANSWER:"
+    3. Last non-empty line.
+    Then clean up wrapping punctuation, prefixes, and junk.
     """
     if not text:
         return "ERROR"
@@ -15,15 +21,40 @@ def extract_final_answer(text: str) -> str:
 
     answer = None
 
+    # 1) Look for a line like: "The final answer is: (<answer>)"
     for raw in lines:
         line = raw.strip()
-        if prefix in line:
-            _, after = line.split(prefix, 1)
-            candidate = after.strip()
+        lower = line.lower()
+        if "final answer is" in lower:
+            # Prefer text after the first colon, if present.
+            if ":" in line:
+                _, after = line.split(":", 1)
+                candidate = after.strip()
+            else:
+                # Fallback: text after "final answer is"
+                _, after = lower.split("final answer is", 1)
+                candidate = after.strip()
+
+            # Strip wrapping parentheses if present: "(...)" -> "..."
+            if candidate.startswith("(") and candidate.endswith(")"):
+                candidate = candidate[1:-1].strip()
+
             if candidate:
                 answer = candidate
                 break
 
+    # 2) If not found, look for a "FINAL ANSWER:" line.
+    if answer is None:
+        for raw in lines:
+            line = raw.strip()
+            if prefix in line:
+                _, after = line.split(prefix, 1)
+                candidate = after.strip()
+                if candidate:
+                    answer = candidate
+                    break
+
+    # 3) Otherwise, take the last non-empty line.
     if answer is None:
         for raw in reversed(lines):
             line = raw.strip()
@@ -31,30 +62,24 @@ def extract_final_answer(text: str) -> str:
                 answer = line
                 break
 
+    # 4) Absolute fallback: whole text.
     if answer is None:
         answer = text.strip()
 
     cleaned = answer.strip()
 
+    # Strip outer quotes.
     cleaned = cleaned.strip('"').strip("'")
 
+    # If FINAL ANSWER leaked into the text, drop everything after it.
     if "FINAL ANSWER" in cleaned:
         cleaned = cleaned.split("FINAL ANSWER")[0].strip()
 
-    core = cleaned.strip("()[] .")
-    if len(cleaned) <= 4 and len(core) == 1 and core.upper() in "ABCD":
-        cleaned = core.upper()
-
-        if any(ord(c) > 127 for c in cleaned):
-            num = extract_number(cleaned)
-            if num is not None and str(num).strip() != "":
-                cleaned = str(num).strip()
-
-    # Strip leading "Answer:" / "Final answer:" style prefixes if the model ignored the format.
+    # Strip leading "Answer:" / "Final answer:" prefixes if the model ignored the format.
     lower_cleaned = cleaned.lower()
-    for prefix in ("answer:", "final answer:", "respuesta:", "réponse:", "antwort:"):
-        if lower_cleaned.startswith(prefix):
-            cleaned = cleaned[len(prefix):].strip()
+    for p in ("answer:", "final answer:", "respuesta:", "réponse:", "antwort:"):
+        if lower_cleaned.startswith(p):
+            cleaned = cleaned[len(p):].strip()
             lower_cleaned = cleaned.lower()
             break
 
@@ -64,11 +89,23 @@ def extract_final_answer(text: str) -> str:
         tokens.pop()
     cleaned = " ".join(tokens)
 
+    # Normalize multiple-choice answers like "(A)" or " a. " to "A".
+    core = cleaned.strip("()[] .")
+    if len(cleaned) <= 4 and len(core) == 1 and core.upper() in "ABCD":
+        cleaned = core.upper()
+
+    # If there are non-ASCII characters (e.g., Chinese digits), try to extract a numeric answer.
+    if any(ord(c) > 127 for c in cleaned):
+        num = extract_number(cleaned)
+        if num is not None and str(num).strip() != "":
+            cleaned = str(num).strip()
+
     # Patch a common truncation pattern for this dataset (S.H.I.E.L -> S.H.I.E.L.D).
     if "Nick Fury, Agent of S.H.I.E.L" in cleaned and "S.H.I.E.L.D" not in cleaned:
         cleaned = cleaned.replace("S.H.I.E.L", "S.H.I.E.L.D")
 
     return cleaned.strip()
+
 
 def run_cot(question: str, domain: str | None = None) -> str:
     # Clean the question text.
@@ -89,33 +126,36 @@ def run_cot(question: str, domain: str | None = None) -> str:
             "Choose the single best option from A, B, C, or D.\n"
             "Do NOT show any reasoning or explanation.\n"
             "Respond on one line in this exact format:\n"
-            "FINAL ANSWER: <letter>\n\n"
+            "The final answer is: (<letter>)\n\n"
             f"Question:\n{q}\n"
         )
+
     elif is_yesno:
         cot_prompt = (
             "Answer the following question with Yes or No only.\n"
             "Do NOT show any reasoning or explanation.\n"
             "Respond on one line, using exactly one of these two forms:\n"
-            "FINAL ANSWER: Yes\nor\nFINAL ANSWER: No\n\n"
+            "The final answer is: (Yes)\n"
+            "or\n"
+            "The final answer is: (No)\n\n"
             f"Question:\n{q}\n"
         )
+
     elif has_digit:
-        # For math questions, encourage careful solving but require only the final answer.
         cot_prompt = (
             "Solve the following math question carefully.\n"
             "Do NOT show any reasoning or explanation.\n"
             "Respond on one line in this exact format:\n"
-            "FINAL ANSWER: <answer>\n\n"
+            "The final answer is: (<answer>)\n\n"
             f"Question:\n{q}\n"
         )
+
     else:
-        # For general questions, request a short final answer only.
         cot_prompt = (
             "Answer the following question.\n"
             "Do NOT show any reasoning or explanation.\n"
             "Respond on one line in this exact format:\n"
-            "FINAL ANSWER: <answer>\n\n"
+            "The final answer is: (<answer>)\n\n"
             f"Question:\n{q}\n"
         )
 
