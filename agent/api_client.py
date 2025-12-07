@@ -14,12 +14,13 @@ INITIAL_BACKOFF = 2
 MAX_BACKOFF = 30
 
 # Global semaphore to limit concurrent API calls
-MAX_CONCURRENT_API_CALLS = 3
+MAX_CONCURRENT_API_CALLS = 20
 _api_semaphore = threading.Semaphore(MAX_CONCURRENT_API_CALLS)
 
 # Jitter range (seconds)
-JITTER_MIN = 0.3
-JITTER_MAX = 1.0
+JITTER_MIN = 0.1
+JITTER_MAX = 0.2
+NUM_WORKERS = 20
 
 def call_model(prompt: str,
                system: str = "",
