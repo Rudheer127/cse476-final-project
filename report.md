@@ -1,48 +1,75 @@
-# CSE 476 Final Project Report
+# CSE 476 Final Project Report - LLM Question Answering Agent
 
-**Project Repository**: https://github.com/Rudheer127/cse476-final-project
+**Author**: Rudheer | **Repository**: [github.com/Rudheer127/cse476-final-project](https://github.com/Rudheer127/cse476-final-project)
 
-## Overview
-I implemented an LLM-based agent that answers questions across multiple domains using different reasoning strategies based on question type to maximize accuracy while staying within API call limits.
+## Project Overview
+An LLM-based agent that answers questions across multiple domains (math, science, history, general knowledge) using adaptive reasoning strategies to maximize accuracy while staying within API constraints (max 20 calls/question).
 
-## Strategies Implemented
+## Architecture
 
-**Chain-of-Thought (CoT)**: The baseline approach where the model outputs answers in a strict `FINAL: <answer>` format. The prompt adapts for MCQ (A/B/C/D), yes/no, numeric, or factoid questions. Implemented in `run_cot` in `agent/strategies.py`.
+| Component | File | Purpose |
+|-----------|------|---------|
+| Core Agent | `agent/agent_core.py` | Question routing and strategy selection based on math detection |
+| Strategies | `agent/strategies.py` | CoT, Self-Critique, Self-Consistency implementations |
+| API Client | `agent/api_client.py` | Rate-limited API calls with exponential backoff and jitter |
+| Evaluation | `evaluation.py` | Text/numeric grading with normalization |
+| Runner | `generate_answer_template.py` | Parallel processing with checkpointing |
 
-**Self-Critique**: A two-step approach for non-math domains. After generating an initial CoT answer, the model reviews and corrects if needed. Short stable answers (<=12 chars, no spaces) skip critique. Implemented in `run_self_critique`.
+## Reasoning Strategies
 
-**Self-Consistency**: For math questions, generates 3 CoT samples and aggregates results using median (numeric) or majority vote (text). Implemented in `run_self_consistency`.
+**Chain-of-Thought (CoT)** - 1 API call: Base strategy forcing strict `FINAL: <answer>` output format. Adapts prompts for MCQ (A/B/C/D), yes/no, numeric, or factoid questions.
 
-## Agent Workflow and Routing
-The `CoreAgent` class routes questions based on math detection signals:
-- Operators (+, -, *, /, ×, ÷) or math keywords (solve, calculate, percent, total, etc.)
-- At least 2 digits in the question text
+**Self-Critique** - 2 API calls: Two-step process for non-math domains. Generates initial CoT answer, then asks model to verify/correct. Short stable answers (<=12 chars, no spaces) skip critique for efficiency.
 
-Math questions use Self-Consistency; others use Self-Critique.
+**Self-Consistency** - 3 API calls: For math questions. Generates 3 CoT samples, aggregates using median (numeric) or majority vote (text) to improve reliability.
+
+## Question Routing Logic
+Math detection triggers Self-Consistency when any of these conditions are met:
+- Contains operators: `+ - * / × ÷`
+- Contains math keywords: solve, calculate, percent, total, how many, how much, etc.
+- Contains 2+ digits in question text
+
+All other questions use Self-Critique.
 
 ## Key Design Decisions
-- **Modular Strategies**: Each strategy is a standalone function for easy testing and swapping
-- **Robust Answer Extraction**: Handles missing prefixes, parenthetical answers, extra whitespace
+- **Modular Design**: Each strategy is a standalone function for testing and extensibility
+- **Robust Answer Extraction**: Handles missing FINAL: prefix, parenthetical answers, extra whitespace, MCQ letters
 - **Rate Limiting**: API client uses exponential backoff, jitter, and semaphore (concurrency=3)
 - **Checkpointing**: Saves progress every 100 questions for resumption after interruptions
+- **Single-Threaded LLM Inference**: Prevents context bleed/KV cache corruption
 
-## Efficiency
-Maximum LLM calls per question = 3, well below the 20-call limit:
-- CoT: 1 call | Self-Critique: 2 calls | Self-Consistency: 3 calls
+## Efficiency & Constraints
+| Strategy | Max API Calls | Use Case |
+|----------|---------------|----------|
+| CoT | 1 | Baseline |
+| Self-Critique | 2 | Non-math domains |
+| Self-Consistency | 3 | Math questions |
 
-## Integration
-The `generate_answer_template.py` uses:
+All strategies stay well below the 20-call limit.
+
+## Integration Example
 ```python
+from agent.agent_core import CoreAgent
 agent = CoreAgent()
-real_answer = agent.run(question["input"])
+answer = agent.run(question["input"])  # Returns extracted final answer
 ```
 
-## Failure Cases
-- Ambiguous factoid answers where the model provides extra context
-- Questions where the model ignores the FINAL: format
-- Numeric aggregation edge cases in self-consistency
+## Known Failure Cases
+- Ambiguous factoid answers where model provides extra context
+- Questions where model ignores the FINAL: format instruction
+- Numeric aggregation edge cases in self-consistency (median selection)
+- Very long or complex multi-step reasoning questions
 
-## Code References
-- `agent/strategies.py`: `run_cot` (74-138), `run_self_critique` (141-192), `run_self_consistency` (229-269)
-- `agent/agent_core.py`: `CoreAgent.run` (8-43)
-- `evaluation.py`: `grade` (22-31)
+## Files & Structure
+```
+cse476-final-project/
+├── agent/                     # Core agent module
+│   ├── agent_core.py          # CoreAgent class with routing logic
+│   ├── api_client.py          # Rate-limited API client
+│   └── strategies.py          # CoT, Self-Critique, Self-Consistency
+├── evaluation.py              # Grading functions
+├── generate_answer_template.py # Main runner with checkpointing
+├── run_test.py                # Development testing
+├── cse_476_final_project_test_data.json  # Test questions
+└── cse_476_final_project_answers.json    # Generated answers
+```
