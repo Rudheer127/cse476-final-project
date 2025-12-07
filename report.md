@@ -28,10 +28,10 @@ For mathematical questions, I implemented Self-Consistency by generating multipl
 
 ## Agent Workflow and Routing
 
-The `CoreAgent` class in `agent/agent_core.py` routes each question to the appropriate strategy. I detect math questions using multiple signals:
-- Presence of operators (+, -, *, /, etc.)
-- Math keywords (solve, calculate, sum, etc.)
-- Multiple digits in the question text
+The `CoreAgent` class in `agent/agent_core.py` routes each question to the appropriate strategy. Math detection uses:
+- Presence of operators (+, -, *, /, ×, ÷)
+- Math keywords (solve, calculate, percent, total, sum, difference, quotient, etc.)
+- At least 2 digits in the question text
 
 Math questions route to Self-Consistency, while all others route to Self-Critique.
 
@@ -41,7 +41,7 @@ Math questions route to Self-Consistency, while all others route to Self-Critiqu
 
 **Robust Answer Extraction**: The `extract_final_answer` function handles edge cases like missing prefixes, parenthetical answers, and extra whitespace.
 
-**Rate Limiting**: The API client includes retry logic with exponential backoff and jitter to handle rate limits gracefully.
+**Rate Limiting**: The API client uses exponential backoff, jitter, and a semaphore limiting concurrency to 3 calls to avoid rate-limit failures.
 
 **Answer Validation**: The answer generation script validates each output to catch malformed responses before saving.
 
@@ -53,6 +53,24 @@ The agent stays well within the 20 LLM calls per question limit:
 - CoT: 1 call
 - Self-Critique: 2 calls (1 for initial answer, 1 for review)
 - Self-Consistency: 3 calls (configurable)
+
+Maximum LLM calls per question = 3, well below the 20-call limit.
+
+## Integration
+
+The `generate_answer_template.py` replaces placeholder answers with:
+
+```python
+agent = CoreAgent()
+real_answer = agent.run(question["input"])
+```
+
+## Failure Cases
+
+Known failure cases include:
+- Ambiguous short factoid answers where the model provides extra context
+- Questions where the model ignores the FINAL: output format
+- Numeric aggregation edge cases in self-consistency (e.g., very different magnitudes)
 
 ## Code References
 

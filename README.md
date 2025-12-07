@@ -26,6 +26,13 @@ export API_BASE="http://10.4.58.53:41701/v1"
 export MODEL_NAME="bens_model"
 ```
 
+### API Call Limits
+
+This agent stays within the 20-call limit per question:
+- CoT = 1 call
+- Self-Critique = 2 calls
+- Self-Consistency = 3 calls
+
 ## Usage
 
 ### Generate Answers
@@ -42,6 +49,16 @@ This will:
 3. Save answers to `cse_476_final_project_answers.json`
 4. Save checkpoints periodically to allow resumption
 
+The placeholder logic in `generate_answer_template.py` must be replaced by your agent. Use:
+
+```python
+from agent.agent_core import CoreAgent
+agent = CoreAgent()
+real_answer = agent.run(question["input"])
+```
+
+This generates real outputs instead of placeholders.
+
 ### Run Evaluation (Development)
 
 For testing during development:
@@ -54,17 +71,11 @@ python run_test.py
 
 ```
 cse476-final-project/
-├── agent/
-│   ├── __init__.py
-│   ├── agent_core.py      # Main agent with routing logic
-│   ├── api_client.py      # API client with retry logic
-│   └── strategies.py      # Reasoning strategies (CoT, etc.)
+├── agent/                 # Agent module (agent_core.py, api_client.py, strategies.py)
 ├── evaluation.py          # Grading and evaluation functions
 ├── generate_answer_template.py  # Main script for answer generation
 ├── run_test.py            # Development testing script
-├── report.md              # Project report
-├── README.md              # This file
-└── cse_476_final_project_test_data.json  # Input questions
+└── report.md              # Project report
 ```
 
 ## Strategies
