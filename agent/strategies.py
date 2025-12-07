@@ -1,7 +1,5 @@
 from agent.api_client import call_model
 from evaluation import extract_number
-from agent.api_client import call_model
-from evaluation import extract_number
 
 def extract_final_answer(text: str) -> str:
     """
