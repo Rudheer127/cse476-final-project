@@ -119,46 +119,35 @@ def run_cot(question: str, domain: str | None = None) -> str:
     has_digit = any(ch.isdigit() for ch in q)
 
     if is_mc:
-        cot_prompt = (
+        instruction = (
             "You are answering a multiple-choice question.\n"
-            "Choose the single best option from A, B, C, or D.\n"
-            "Do NOT show any reasoning or explanation.\n"
-            "Respond on one line in this exact format:\n"
-            "The final answer is: (<letter>)\n\n"
-            f"Question:\n{q}\n"
+            "Choose only one letter: A, B, C, or D.\n"
         )
-
     elif is_yesno:
-        cot_prompt = (
-            "Answer the following question with Yes or No only.\n"
-            "Do NOT show any reasoning or explanation.\n"
-            "Respond on one line, using exactly one of these two forms:\n"
-            "The final answer is: (Yes)\n"
-            "or\n"
-            "The final answer is: (No)\n\n"
-            f"Question:\n{q}\n"
+        instruction = (
+            "Answer the question with only Yes or No.\n"
         )
-
     elif has_digit:
-        cot_prompt = (
-            "Solve the following math question carefully.\n"
-            "Do NOT show any reasoning or explanation.\n"
-            "Respond on one line in this exact format:\n"
-            "The final answer is: (<answer>)\n\n"
-            f"Question:\n{q}\n"
+        instruction = (
+            "Solve the math question. Answer with only the final numeric value.\n"
+        )
+    else:
+        instruction = (
+            "Answer the question with a short factoid phrase.\n"
         )
 
-    else:
-        cot_prompt = (
-            "Answer the following question.\n"
-            "Do NOT show any reasoning or explanation.\n"
-            "Respond on one line in this exact format:\n"
-            "The final answer is: (<answer>)\n\n"
-            f"Question:\n{q}\n"
-        )
+    instruction += (
+        "STRICT RULES:\n"
+        "- Do NOT explain your reasoning.\n"
+        "- Do NOT show any work or steps.\n"
+        "- Do NOT write more than one line.\n"
+        "- Respond with ONLY this format:\n"
+        "FINAL: <answer>\n\n"
+        f"Question:\n{q}\n"
+    )
 
     # Call the model once, after choosing the prompt.
-    result = call_model(cot_prompt, temperature=0.0)
+    result = call_model(instruction, temperature=0.0)
 
     # If the model call failed, log the error and return a non-crashing placeholder.
     if not result.get("ok"):
